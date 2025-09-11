@@ -174,48 +174,94 @@ async def mccn_gate_info() -> str:
           "━━━━━━━━━━━━━")
 
 # Handlers
-async def on_start(message: types.Message, state: FSMContext, db, bot: Bot):
-  u = message.from_user
-  mu = await ensure_user(db, u)
-  ban = await ensure_not_banned(db, mu)
-  maint = await ensure_not_maintenance(db, u.id, mu["is_admin"]) if not ban else None
-  if ban:
-    msg = await message.answer(ban)
-    await asyncio.sleep(5); await bot.delete_message(message.chat.id, msg.message_id)
-    return
-  if maint:
-    await message.answer(maint)
-    return
-  await state.clear()
-  await message.answer(await start_message_text(u), reply_markup=kb_start(), parse_mode=ParseMode.HTML)
+async def on_start(message: types.Message, state: FSMContext, bot: Bot):
+    db = await open_db()
+    u = message.from_user
+    mu = await ensure_user(db, u)
+    ban = await ensure_not_banned(db, mu)
+    maint = await ensure_not_maintenance(db, u.id, mu["is_admin"]) if not ban else None
+
+    if ban:
+        msg = await message.answer(ban)
+        await asyncio.sleep(5)
+        await bot.delete_message(message.chat.id, msg.message_id)
+        return
+
+    if maint:
+        await message.answer(maint)
+        return
+
+    await state.clear()
+    await message.answer(
+        await start_message_text(u),
+        reply_markup=kb_start(),
+        parse_mode=ParseMode.HTML
+    )
+    await db.close()
+
 
 async def cb_close(call: types.CallbackQuery):
-  try: await call.message.delete()
-  except: pass
-  await call.answer()
+    try:
+        await call.message.delete()
+    except:
+        pass
+    await call.answer()
+
 
 async def cb_back_menu(call: types.CallbackQuery, state: FSMContext):
-  await state.clear()
-  await call.message.edit_text(await start_message_text(call.from_user), reply_markup=kb_start(), parse_mode=ParseMode.HTML)
-  await call.answer()
-
-async def cb_reg(call: types.CallbackQuery, db, bot: Bot):
-  u = call.from_user
-  ex = await get_user(db, u.id)
-  if ex:
-    b=InlineKeyboardBuilder(); b.button(text="Commands", callback_data="commands"); b.button(text="Close", callback_data="close"); b.adjust(2)
-    await call.message.edit_text("Already Registered ⚠️\n\nMessage: You are already registered in our bot. No need to register now.\n\nExplore My Various Commands And Abilities By Tapping on Commands Button.", reply_markup=b.as_markup())
+    await state.clear()
+    await call.message.edit_text(
+        await start_message_text(call.from_user),
+        reply_markup=kb_start(),
+        parse_mode=ParseMode.HTML
+    )
     await call.answer()
-    return
-  nu = await ensure_user(db, u)
-  if NEW_USER_CHANNEL_ID:
-    try:
-      await bot.send_message(NEW_USER_CHANNEL_ID, f"🆕 New user registered: {mention(u)} (ID: {u.id})", parse_mode=ParseMode.HTML)
-    except: pass
-  await call.message.edit_text(("Registration Successful\n"
-    "━━━━━━━━━━━━━━\n"
-    f"Name: {u.full_name}\nUser ID: {u.id}\nCredits: {nu['credits']}"), reply_markup=kb_back())
-  await call.answer("Registered")
+
+
+async def cb_reg(call: types.CallbackQuery, bot: Bot):
+    db = await open_db()
+    u = call.from_user
+    ex = await get_user(db, u.id)
+
+    if ex:
+        b = InlineKeyboardBuilder()
+        b.button(text="Commands", callback_data="commands")
+        b.button(text="Close", callback_data="close")
+        b.adjust(2)
+        await call.message.edit_text(
+            "Already Registered ⚠️\n\n"
+            "Message: You are already registered in our bot. "
+            "No need to register now.\n\n"
+            "Explore My Various Commands And Abilities By Tapping on Commands Button.",
+            reply_markup=b.as_markup()
+        )
+        await call.answer()
+        await db.close()
+        return
+
+    nu = await ensure_user(db, u)
+
+    if NEW_USER_CHANNEL_ID:
+        try:
+            await bot.send_message(
+                NEW_USER_CHANNEL_ID,
+                f"🆕 New user registered: {mention(u)} (ID: {u.id})",
+                parse_mode=ParseMode.HTML
+            )
+        except:
+            pass
+
+    await call.message.edit_text(
+        "Registration Successful\n"
+        "━━━━━━━━━━━━━━\n"
+        f"Name: {u.full_name}\n"
+        f"User ID: {u.id}\n"
+        f"Credits: {nu['credits']}",
+        reply_markup=kb_back()
+    )
+    await call.answer("Registered")
+    await db.close()
+
 
 async def cb_commands(call: types.CallbackQuery, state: FSMContext):
   await state.set_state(Flow.in_commands)

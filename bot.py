@@ -945,9 +945,6 @@ async def main():
     dp = Dispatcher()
     db = await open_db()
 
-    # Message: guard during processing
-    dp.message.register(delete_if_processing)
-
     # Message: /start
     dp.message.register(partial(on_start, db=db, bot=bot), CommandStart())
 
@@ -977,6 +974,9 @@ async def main():
     dp.message.register(partial(cmd_freeze, db=db), F.text.startswith("/freezebotusage"))
     dp.message.register(partial(cmd_unfreeze, db=db), F.text.startswith("/unfreezebotusage"))
     dp.message.register(partial(cmd_broadcast, db=db, bot=bot), F.text.startswith("/broadcastmessage"))
+
+    # Message: guard during processing (register last so it doesn't block other handlers)
+    dp.message.register(delete_if_processing)
 
     await dp.start_polling(bot)
 

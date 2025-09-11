@@ -11,6 +11,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.client.default import DefaultBotProperties
 
 logging.basicConfig(level=logging.INFO)
 
@@ -176,28 +177,31 @@ async def mccn_gate_info() -> str:
 # Handlers
 async def on_start(message: types.Message, state: FSMContext, bot: Bot):
     db = await open_db()
-    u = message.from_user
-    mu = await ensure_user(db, u)
-    ban = await ensure_not_banned(db, mu)
-    maint = await ensure_not_maintenance(db, u.id, mu["is_admin"]) if not ban else None
+    try:
+      u = message.from_user
+      mu = await ensure_user(db, u)
+      ban = await ensure_not_banned(db, mu)
+      maint = await ensure_not_maintenance(db, u.id, mu["is_admin"]) if not ban else None
 
-    if ban:
-        msg = await message.answer(ban)
-        await asyncio.sleep(5)
-        await bot.delete_message(message.chat.id, msg.message_id)
-        return
+      if ban:
+          msg = await message.answer(ban)
+          await asyncio.sleep(5)
+          try: await bot.delete_message(message.chat.id, msg.message_id)
+          except: pass
+          return
 
-    if maint:
-        await message.answer(maint)
-        return
+      if maint:
+          await message.answer(maint)
+          return
 
-    await state.clear()
-    await message.answer(
-        await start_message_text(u),
-        reply_markup=kb_start(),
-        parse_mode=ParseMode.HTML
-    )
-    await db.close()
+      await state.clear()
+      await message.answer(
+          await start_message_text(u),
+          reply_markup=kb_start(),
+          parse_mode=ParseMode.HTML
+      )
+    finally:
+      await db.close()
 
 
 async def cb_close(call: types.CallbackQuery):
@@ -220,47 +224,48 @@ async def cb_back_menu(call: types.CallbackQuery, state: FSMContext):
 
 async def cb_reg(call: types.CallbackQuery, bot: Bot):
     db = await open_db()
-    u = call.from_user
-    ex = await get_user(db, u.id)
+    try:
+      u = call.from_user
+      ex = await get_user(db, u.id)
 
-    if ex:
-        b = InlineKeyboardBuilder()
-        b.button(text="Commands", callback_data="commands")
-        b.button(text="Close", callback_data="close")
-        b.adjust(2)
-        await call.message.edit_text(
-            "Already Registered ⚠️\n\n"
-            "Message: You are already registered in our bot. "
-            "No need to register now.\n\n"
-            "Explore My Various Commands And Abilities By Tapping on Commands Button.",
-            reply_markup=b.as_markup()
-        )
-        await call.answer()
-        await db.close()
-        return
+      if ex:
+          b = InlineKeyboardBuilder()
+          b.button(text="Commands", callback_data="commands")
+          b.button(text="Close", callback_data="close")
+          b.adjust(2)
+          await call.message.edit_text(
+              "Already Registered ⚠️\n\n"
+              "Message: You are already registered in our bot. "
+              "No need to register now.\n\n"
+              "Explore My Various Commands And Abilities By Tapping on Commands Button.",
+              reply_markup=b.as_markup()
+          )
+          await call.answer()
+          return
 
-    nu = await ensure_user(db, u)
+      nu = await ensure_user(db, u)
 
-    if NEW_USER_CHANNEL_ID:
-        try:
-            await bot.send_message(
-                NEW_USER_CHANNEL_ID,
-                f"🆕 New user registered: {mention(u)} (ID: {u.id})",
-                parse_mode=ParseMode.HTML
-            )
-        except:
-            pass
+      if NEW_USER_CHANNEL_ID:
+          try:
+              await bot.send_message(
+                  NEW_USER_CHANNEL_ID,
+                  f"🆕 New user registered: {mention(u)} (ID: {u.id})",
+                  parse_mode=ParseMode.HTML
+              )
+          except:
+              pass
 
-    await call.message.edit_text(
-        "Registration Successful\n"
-        "━━━━━━━━━━━━━━\n"
-        f"Name: {u.full_name}\n"
-        f"User ID: {u.id}\n"
-        f"Credits: {nu['credits']}",
-        reply_markup=kb_back()
-    )
-    await call.answer("Registered")
-    await db.close()
+      await call.message.edit_text(
+          "Registration Successful\n"
+          "━━━━━━━━━━━━━━\n"
+          f"Name: {u.full_name}\n"
+          f"User ID: {u.id}\n"
+          f"Credits: {nu['credits']}",
+          reply_markup=kb_back()
+      )
+      await call.answer("Registered")
+    finally:
+      await db.close()
 
 
 async def cb_commands(call: types.CallbackQuery, state: FSMContext):
@@ -272,12 +277,16 @@ async def cb_gate(call: types.CallbackQuery, state: FSMContext):
   await call.message.edit_text("Choose Your Gate Type:", reply_markup=kb_gate())
   await call.answer()
 
-async def cb_credits(call: types.CallbackQuery, db):
-  u = await get_user(db, call.from_user.id)
-  joined = u["joined_at"].split("T")[0] if u.get("joined_at") else "N/A"
-  credits = "∞" if u.get("is_admin") else u.get("credits",0)
-  await call.message.edit_text(f"🟢 Name : {call.from_user.full_name}\n➛ Joined : {joined}\n╰┈➤ Credits 💰 {credits}", reply_markup=kb_back(), parse_mode=ParseMode.HTML)
-  await call.answer()
+async def cb_credits(call: types.CallbackQuery, state: FSMContext):
+  db = await open_db()
+  try:
+    u = await get_user(db, call.from_user.id)
+    joined = u["joined_at"].split("T")[0] if u.get("joined_at") else "N/A"
+    credits = "∞" if u.get("is_admin") else u.get("credits",0)
+    await call.message.edit_text(f"🟢 Name : {call.from_user.full_name}\n➛ Joined : {joined}\n╰┈➤ Credits 💰 {credits}", reply_markup=kb_back(), parse_mode=ParseMode.HTML)
+    await call.answer()
+  finally:
+    await db.close()
 
 async def cb_ccn(call: types.CallbackQuery, state: FSMContext):
   await state.set_state(Flow.in_gate_ccn)
@@ -310,116 +319,124 @@ async def animate_processing(bot: Bot, chat_id: int, message_id: int, base: str,
     except: pass
     i+=1; await asyncio.sleep(0.6)
 
-async def do_ccn(message: types.Message, state: FSMContext, db, bot: Bot):
-  if await is_maintenance(db) and message.from_user.id not in ADMIN_USER_IDS:
-    await message.answer("🛠️ Bot is under maintenance. Please try again later."); return
-  if (await state.get_state()) != Flow.in_gate_ccn.state:
-    try: await message.delete()
-    except: pass
-    return
-  m = cc_re.match(message.text or "")
-  if not m:
-    try: await message.delete()
-    except: pass
-    return
-  user = await ensure_user(db, message.from_user)
-  if not user.get("is_admin") and user.get("credits",0) < 1:
-    await insufficient(message); return
-  if processing_users.get(message.from_user.id):
-    try: await message.delete()
-    except: pass
-    return
-  processing_users[message.from_user.id]=True
-  full = await parse_cc(m.group(1))
-  if not full:
-    processing_users.pop(message.from_user.id, None)
-    return
-  cnum = full.split("|")[0]; bin6 = cnum[:6]
-  info = await bin_details(bin6)
-  base = f"💳 {full}"
-  msg = await message.answer(base)
-  stop = asyncio.Event(); task = asyncio.create_task(animate_processing(bot, message.chat.id, msg.message_id, base+format_bin_block(bin6, info), stop))
+async def do_ccn(message: types.Message, state: FSMContext, bot: Bot):
+  db = await open_db()
   try:
-    res = await fetch_json(BASE_CC_API + full)
-    # API returns list
-    if isinstance(res, list) and res:
-      r=res[0]; status = r.get("status",""); emsg = r.get("message","Result")
-      ok = status in ("succeeded","order_id","requires_action") or (emsg == "Your card's security code is incorrect.")
-      head = "✅ Approved" if ok else "❌ Declined"
-      text = f"💳 {full} {head}\n╰┈➤ {emsg}" + format_bin_block(bin6, info) + f"\n🆔 Checked by: {mention(message.from_user)}"
-      await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=text, parse_mode=ParseMode.HTML)
-      if CHECK_RESULTS_CHANNEL_ID:
-        try: await bot.send_message(CHECK_RESULTS_CHANNEL_ID, text, parse_mode=ParseMode.HTML)
-        except: pass
-      if not user.get("is_admin"):
-        await deduct_credits(db, message.from_user.id, 1)
-  finally:
-    stop.set(); await asyncio.sleep(0.1)
-    processing_users.pop(message.from_user.id, None)
-    # show gate card again
-    await message.answer(await ccn_gate_info(), reply_markup=kb_back())
-
-async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
-  if await is_maintenance(db) and message.from_user.id not in ADMIN_USER_IDS:
-    await message.answer("🛠️ Bot is under maintenance. Please try again later."); return
-  if (await state.get_state()) != Flow.in_gate_mccn.state:
-    try: await message.delete()
-    except: pass
-    return
-  m = mass_re.match(message.text or "")
-  if not m:
-    try: await message.delete()
-    except: pass
-    return
-  user = await ensure_user(db, message.from_user)
-  credits = 9999 if user.get("is_admin") else user.get("credits",0)
-  raw = m.group(1).replace("\n"," ").split()
-  cards=[]
-  for s in raw:
-    p = await parse_cc(s)
-    if p: cards.append(p)
-    if len(cards)>=5: break
-  if not cards:
-    try: await message.delete()
-    except: pass
-    return
-  can = min(len(cards), credits)
-  if can==0:
-    await insufficient(message); return
-  cards = cards[:can]
-  # bins
-  uniq_bins = {}
-  for c in cards:
-    b = c.split('|')[0][:6]
-    if b not in uniq_bins:
-      uniq_bins[b] = await bin_details(b)
-  # prepare message
-  base = "\n".join([f"💳 {c}" for c in cards])
-  # append bins blocks sorted by order of first appearance
-  for b,info in uniq_bins.items():
-    base += format_bin_block(b, info)
-  msg = await message.answer(base)
-  stop = asyncio.Event(); task = asyncio.create_task(animate_processing(bot, message.chat.id, msg.message_id, base, stop))
-  try:
-    # call API per card to get messages, so credit deduct per card
-    out_lines=[]
-    for c in cards:
-      res = await fetch_json(BASE_CC_API + c)
+    if await is_maintenance(db) and message.from_user.id not in ADMIN_USER_IDS:
+      await message.answer("🛠️ Bot is under maintenance. Please try again later."); return
+    if (await state.get_state()) != Flow.in_gate_ccn.state:
+      try: await message.delete()
+      except: pass
+      return
+    m = cc_re.match(message.text or "")
+    if not m:
+      try: await message.delete()
+      except: pass
+      return
+    user = await ensure_user(db, message.from_user)
+    if not user.get("is_admin") and user.get("credits",0) < 1:
+      await insufficient(message); return
+    if processing_users.get(message.from_user.id):
+      try: await message.delete()
+      except: pass
+      return
+    processing_users[message.from_user.id]=True
+    full = await parse_cc(m.group(1))
+    if not full:
+      processing_users.pop(message.from_user.id, None)
+      return
+    cnum = full.split("|")[0]; bin6 = cnum[:6]
+    info = await bin_details(bin6)
+    base = f"💳 {full}"
+    msg = await message.answer(base)
+    stop = asyncio.Event(); task = asyncio.create_task(animate_processing(bot, message.chat.id, msg.message_id, base+format_bin_block(bin6, info), stop))
+    try:
+      res = await fetch_json(BASE_CC_API + full)
+      # API returns list
       if isinstance(res, list) and res:
-        r=res[0]; emsg = r.get("message","Result"); status=r.get("status","")
+        r=res[0]; status = r.get("status",""); emsg = r.get("message","Result")
         ok = status in ("succeeded","order_id","requires_action") or (emsg == "Your card's security code is incorrect.")
         head = "✅ Approved" if ok else "❌ Declined"
-        out_lines.append(f"{c} {head} | {emsg}")
-        if not user.get("is_admin"): await deduct_credits(db, message.from_user.id, 1)
-    final = ("\n".join(out_lines))
-    final += f"\n🆔 Checked by: {mention(message.from_user)}"
-    await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=final, parse_mode=ParseMode.HTML)
-    if CHECK_RESULTS_CHANNEL_ID:
-      try: await bot.send_message(CHECK_RESULTS_CHANNEL_ID, final, parse_mode=ParseMode.HTML)
-      except: pass
+        text = f"💳 {full} {head}\n╰┈➤ {emsg}" + format_bin_block(bin6, info) + f"\n🆔 Checked by: {mention(message.from_user)}"
+        await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=text, parse_mode=ParseMode.HTML)
+        if CHECK_RESULTS_CHANNEL_ID:
+          try: await bot.send_message(CHECK_RESULTS_CHANNEL_ID, text, parse_mode=ParseMode.HTML)
+          except: pass
+        if not user.get("is_admin"):
+          await deduct_credits(db, message.from_user.id, 1)
+    finally:
+      stop.set(); await asyncio.sleep(0.1)
+      processing_users.pop(message.from_user.id, None)
+      # show gate card again
+      await message.answer(await ccn_gate_info(), reply_markup=kb_back())
   finally:
-    stop.set(); await asyncio.sleep(0.1)
-    await message.answer(await mccn_gate_info(), reply_markup=kb_back())
+    await db.close()
+
+async def do_mccn(message: types.Message, state: FSMContext, bot: Bot):
+  db = await open_db()
+  try:
+    if await is_maintenance(db) and message.from_user.id not in ADMIN_USER_IDS:
+      await message.answer("🛠️ Bot is under maintenance. Please try again later."); return
+    if (await state.get_state()) != Flow.in_gate_mccn.state:
+      try: await message.delete()
+      except: pass
+      return
+    m = mass_re.match(message.text or "")
+    if not m:
+      try: await message.delete()
+      except: pass
+      return
+    user = await ensure_user(db, message.from_user)
+    credits = 9999 if user.get("is_admin") else user.get("credits",0)
+    raw = m.group(1).replace("\n"," ").split()
+    cards=[]
+    for s in raw:
+      p = await parse_cc(s)
+      if p: cards.append(p)
+      if len(cards)>=5: break
+    if not cards:
+      try: await message.delete()
+      except: pass
+      return
+    can = min(len(cards), credits)
+    if can==0:
+      await insufficient(message); return
+    cards = cards[:can]
+    # bins
+    uniq_bins = {}
+    for c in cards:
+      b = c.split('|')[0][:6]
+      if b not in uniq_bins:
+        uniq_bins[b] = await bin_details(b)
+    # prepare message
+    base = "\n".join([f"💳 {c}" for c in cards])
+    # append bins blocks sorted by order of first appearance
+    for b,info in uniq_bins.items():
+      base += format_bin_block(b, info)
+    msg = await message.answer(base)
+    stop = asyncio.Event(); task = asyncio.create_task(animate_processing(bot, message.chat.id, msg.message_id, base, stop))
+    try:
+      # call API per card to get messages, so credit deduct per card
+      out_lines=[]
+      for c in cards:
+        res = await fetch_json(BASE_CC_API + c)
+        if isinstance(res, list) and res:
+          r=res[0]; emsg = r.get("message","Result"); status=r.get("status","")
+          ok = status in ("succeeded","order_id","requires_action") or (emsg == "Your card's security code is incorrect.")
+          head = "✅ Approved" if ok else "❌ Declined"
+          out_lines.append(f"{c} {head} | {emsg}")
+          if not user.get("is_admin"): await deduct_credits(db, message.from_user.id, 1)
+      final = ("\n".join(out_lines))
+      final += f"\n🆔 Checked by: {mention(message.from_user)}"
+      await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=final, parse_mode=ParseMode.HTML)
+      if CHECK_RESULTS_CHANNEL_ID:
+        try: await bot.send_message(CHECK_RESULTS_CHANNEL_ID, final, parse_mode=ParseMode.HTML)
+        except: pass
+    finally:
+      stop.set(); await asyncio.sleep(0.1)
+      await message.answer(await mccn_gate_info(), reply_markup=kb_back())
+  finally:
+    await db.close()
 
 # Delete stray messages in gate states
 async def delete_other(message: types.Message):
@@ -430,27 +447,35 @@ async def delete_other(message: types.Message):
 async def admin_only(message: types.Message) -> bool:
   return message.from_user.id in ADMIN_USER_IDS
 
-async def cmd_add_credits(message: types.Message, db):
+async def cmd_add_credits(message: types.Message):
   if not await admin_only(message): return
+  db = await open_db()
   try:
     _, uid, amt = message.text.split()
     await add_credits(db, int(uid), int(amt))
     txt = f"Credits Added ✅\n━━━━━━━━━━━━━\nUser: <a href=\"tg://user?id={uid}\">{uid}</a>\nCredits Added: {amt}\nDate: {datetime.utcnow().date()}"
     await message.answer(txt, parse_mode=ParseMode.HTML)
-  except Exception as e:
+  except Exception:
     await message.answer("Usage: /addusercredits <user_id> <amount>")
+  finally:
+    await db.close()
 
-async def cmd_deduct_credits(message: types.Message, db):
+async def cmd_deduct_credits(message: types.Message):
   if not await admin_only(message): return
+  db = await open_db()
   try:
     _, uid, amt = message.text.split()
     await deduct_credits(db, int(uid), int(amt))
     txt = f"Credits Deducted ✅\n━━━━━━━━━━━━━\nUser: <a href=\"tg://user?id={uid}\">{uid}</a>\nCredits Deducted: {amt}\nDate: {datetime.utcnow().date()}"
     await message.answer(txt, parse_mode=ParseMode.HTML)
-  except: await message.answer("Usage: /deductusercredit <user_id> <amount>")
+  except:
+    await message.answer("Usage: /deductusercredit <user_id> <amount>")
+  finally:
+    await db.close()
 
-async def cmd_ban(message: types.Message, db):
+async def cmd_ban(message: types.Message):
   if not await admin_only(message): return
+  db = await open_db()
   try:
     _, uid, duration = message.text.split()
     until=None
@@ -459,86 +484,115 @@ async def cmd_ban(message: types.Message, db):
     else: until = datetime.max
     await set_ban(db, int(uid), until)
     await message.answer(f"User {uid} banned until {until if until!=datetime.max else '∞'}")
-  except: await message.answer("Usage: /banuseraccess <user_id> <1h|1d|2day|unlimited>")
+  except:
+    await message.answer("Usage: /banuseraccess <user_id> <1h|1d|2day|unlimited>")
+  finally:
+    await db.close()
 
-async def cmd_unban(message: types.Message, db):
+async def cmd_unban(message: types.Message):
   if not await admin_only(message): return
+  db = await open_db()
   try:
     _, uid = message.text.split()
     await set_ban(db, int(uid), None)
     url=f"tg://user?id={uid}"
     await message.answer(f"<a href=\"{url}\">User</a> unbanned.", parse_mode=ParseMode.HTML)
-  except: await message.answer("Usage: /unbanuseraccess <user_id>")
+  except:
+    await message.answer("Usage: /unbanuseraccess <user_id>")
+  finally:
+    await db.close()
 
-async def cmd_show_users(message: types.Message, db):
+async def cmd_show_users(message: types.Message):
   if not await admin_only(message): return
-  c=await db.execute("SELECT tg_id, username, credits, joined_at FROM users ORDER BY joined_at DESC LIMIT 200")
-  rows=await c.fetchall()
-  lines=[f"{r[0]} | @{r[1] or '-'} | {r[2]} | {r[3][:10] if r[3] else ''}" for r in rows]
-  await message.answer("Users (id|username|credits|joined):\n"+"\n".join(lines)[:4000])
-
-async def cmd_freeze(message: types.Message, db):
-  if not await admin_only(message): return
-  await set_maintenance(db, True); await message.answer("🛠️ Bot usage frozen for maintenance.")
-
-async def cmd_unfreeze(message: types.Message, db):
-  if not await admin_only(message): return
-  await set_maintenance(db, False); await message.answer("✅ Bot is live again.")
-
-async def cmd_broadcast(message: types.Message, db, bot: Bot):
-  if not await admin_only(message): return
+  db = await open_db()
   try:
-    content = message.text.split(" ",1)[1]
-  except: await message.answer("Usage: /broadcastmessage <text> (use \\n for new lines)"); return
-  content = content.replace("\\n","\n")
-  c=await db.execute("SELECT tg_id FROM users"); rows=await c.fetchall()
-  sent=0
-  for (uid,) in rows:
-    try: await bot.send_message(uid, content)
-    except: pass
-    sent+=1; await asyncio.sleep(0.03)
-  await message.answer(f"Broadcast sent to {sent} users")
+    c=await db.execute("SELECT tg_id, username, credits, joined_at FROM users ORDER BY joined_at DESC LIMIT 200")
+    rows=await c.fetchall()
+    lines=[f"{r[0]} | @{r[1] or '-'} | {r[2]} | {r[3][:10] if r[3] else ''}" for r in rows]
+    await message.answer("Users (id|username|credits|joined):\n"+"\n".join(lines)[:4000])
+  finally:
+    await db.close()
+
+async def cmd_freeze(message: types.Message):
+  if not await admin_only(message): return
+  db = await open_db()
+  try:
+    await set_maintenance(db, True); await message.answer("🛠️ Bot usage frozen for maintenance.")
+  finally:
+    await db.close()
+
+async def cmd_unfreeze(message: types.Message):
+  if not await admin_only(message): return
+  db = await open_db()
+  try:
+    await set_maintenance(db, False); await message.answer("✅ Bot is live again.")
+  finally:
+    await db.close()
+
+async def cmd_broadcast(message: types.Message, bot: Bot):
+  if not await admin_only(message): return
+  db = await open_db()
+  try:
+    try:
+      content = message.text.split(" ",1)[1]
+    except:
+      await message.answer("Usage: /broadcastmessage <text> (use \\n for new lines)"); return
+    content = content.replace("\\n","\n")
+    c=await db.execute("SELECT tg_id FROM users"); rows=await c.fetchall()
+    sent=0
+    for (uid,) in rows:
+      try: await bot.send_message(uid, content)
+      except: pass
+      sent+=1; await asyncio.sleep(0.03)
+    await message.answer(f"Broadcast sent to {sent} users")
+  finally:
+    await db.close()
 
 # App wiring
 async def main():
   if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN env missing")
 
-  # ✅ use DefaultBotProperties for parse_mode
-  from aiogram.client.default import DefaultBotProperties
   bot = Bot(
       BOT_TOKEN,
       default=DefaultBotProperties(parse_mode=ParseMode.HTML)
   )
 
   dp = Dispatcher()
-  db = await open_db()
+  # we keep a db open in handlers when needed; still creating DB file here ensures migrations run
+  _db = await open_db()
+  await _db.close()
 
-  # ✅ aiogram injects FSMContext automatically, no need for s.fsm
-  dp.message.register(lambda m, d=db, b=bot: on_start(m, FSMContext(), d, b), CommandStart())
+  # register handlers (register functions directly so aiogram injects state & bot)
+  dp.message.register(on_start, CommandStart())
   dp.callback_query.register(cb_close, F.data == "close")
   dp.callback_query.register(cb_back_menu, F.data == "back_to_menu")
-  dp.callback_query.register(lambda c, d=db, b=bot: cb_reg(c, d, b), F.data == "reg")
+  dp.callback_query.register(cb_reg, F.data == "reg")
   dp.callback_query.register(cb_commands, F.data == "commands")
   dp.callback_query.register(cb_gate, F.data == "gate")
-  dp.callback_query.register(lambda c, d=db: cb_credits(c, d), F.data == "credits")
+  dp.callback_query.register(cb_credits, F.data == "credits")
   dp.callback_query.register(cb_ccn, F.data == "ccn")
   dp.callback_query.register(cb_mccn, F.data == "mccn")
   dp.callback_query.register(cb_commands, F.data == "back_to_commands")
 
-  dp.message.register(lambda m, d=db, b=bot: do_ccn(m, d, b), Flow.in_gate_ccn, F.text.startswith("/ccn"))
-  dp.message.register(lambda m, d=db, b=bot: do_mccn(m, d, b), Flow.in_gate_mccn, F.text.startswith("/mccn"))
+  dp.message.register(do_ccn, Flow.in_gate_ccn, F.text.startswith("/ccn"))
+  dp.message.register(do_mccn, Flow.in_gate_mccn, F.text.startswith("/mccn"))
   dp.message.register(delete_other, Flow.in_gate_ccn)
   dp.message.register(delete_other, Flow.in_gate_mccn)
 
-  dp.message.register(lambda m, d=db: cmd_add_credits(m, d), F.text.startswith("/addusercredits"))
-  dp.message.register(lambda m, d=db: cmd_deduct_credits(m, d), F.text.startswith("/deductusercredit"))
-  dp.message.register(lambda m, d=db: cmd_ban(m, d), F.text.startswith("/banuseraccess"))
-  dp.message.register(lambda m, d=db: cmd_unban(m, d), F.text.startswith("/unbanuseraccess"))
-  dp.message.register(lambda m, d=db: cmd_show_users(m, d), F.text.startswith("/showuserlist"))
-  dp.message.register(lambda m, d=db: cmd_freeze(m, d), F.text.startswith("/freezebotusage"))
-  dp.message.register(lambda m, d=db: cmd_unfreeze(m, d), F.text.startswith("/unfreezebotusage"))
-  dp.message.register(lambda m, d=db, b=bot: cmd_broadcast(m, d, b), F.text.startswith("/broadcastmessage"))
+  dp.message.register(cmd_add_credits, F.text.startswith("/addusercredits"))
+  dp.message.register(cmd_deduct_credits, F.text.startswith("/deductusercredit"))
+  dp.message.register(cmd_ban, F.text.startswith("/banuseraccess"))
+  dp.message.register(cmd_unban, F.text.startswith("/unbanuseraccess"))
+  dp.message.register(cmd_show_users, F.text.startswith("/showuserlist"))
+  dp.message.register(cmd_freeze, F.text.startswith("/freezebotusage"))
+  dp.message.register(cmd_unfreeze, F.text.startswith("/unfreezebotusage"))
+  dp.message.register(cmd_broadcast, F.text.startswith("/broadcastmessage"))
 
   await dp.start_polling(bot)
 
+if __name__ == "__main__":
+  try:
+    asyncio.run(main())
+  except (KeyboardInterrupt, SystemExit):
+    pass

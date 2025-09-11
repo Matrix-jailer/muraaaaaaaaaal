@@ -3,7 +3,7 @@ import re
 import json
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, List
 from functools import partial
 
@@ -100,7 +100,7 @@ async def ensure_user(db, u: types.User):
     ex = await get_user(db, u.id)
     if ex:
         return ex
-    joined = datetime.utcnow().isoformat()
+    joined = datetime.now(timezone.utc).isoformat()
     is_admin = 1 if u.id in ADMIN_USER_IDS else 0
     await db.execute(
         "INSERT INTO users(tg_id, username, full_name, credits, banned_until, joined_at, is_admin) VALUES(?,?,?,?,?,?,?)",
@@ -243,8 +243,13 @@ async def ensure_not_banned(db, user) -> Optional[str]:
     if user and user.get("banned_until"):
         try:
             until = datetime.fromisoformat(user["banned_until"]) if user["banned_until"] else None
-            if until and until > datetime.utcnow():
-                left = until - datetime.utcnow()
+            if not until:
+                return None
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            if until > now:
+                left = until - now
                 return f"⛔ You are banned. Time left: {str(left).split('.')[0]}"
         except Exception:
             return "⛔ You are banned."
@@ -340,11 +345,21 @@ async def parse_cc(cc: str) -> Optional[str]:
 def classify_head(status: str, message: str) -> str:
     s = (status or "").lower()
     upper_msg = (message or "").upper()
+    # Not supported / card type errors
+    if any(k in upper_msg for k in [
+        "NOT SUPPORTED", "UNSUPPORTED", "CARD TYPE NOT SUPPORTED", "CARD NOT SUPPORTED", "ONLY VISA", "ONLY MASTERCARD"
+    ]):
+        return "⚠️ <b>Error</b>"
     # 3DS / OTP detection
     if any(k in upper_msg for k in ["3DS", "3D", "OTP", "ONE TIME PASSWORD", "REDIRECT", "3-D"]):
         return "⚠️ <b>3D Card</b>"
     # Approved-ish outcomes
-    if s in ("succeeded", "order_id", "requires_action"):
+    success_keywords = [
+        "SUCCESS", "SUCCEEDED", "APPROVED", "AUTHORIZED", "AUTHORISED",
+        "CAPTURED", "CHARGED", "PAYMENT SUCCESS", "TRANSACTION APPROVED",
+        "CCN ADDED SUCCESSFULLY", "CCN ADDED", "LIVE", "VALID"
+    ]
+    if s in ("succeeded", "order_id", "requires_action") or any(k in upper_msg for k in success_keywords):
         return "✅ <b>Approved</b>"
     if "SECURITY CODE IS INCORRECT" in upper_msg:
         return "✅ <b>Approved</b>"
@@ -406,6 +421,16 @@ async def do_ccn(message: types.Message, state: FSMContext, db, bot: Bot):
             await message.delete()
         except Exception:
             pass
+        return
+
+    # Ban check
+    ban_msg = await ensure_not_banned(db, existing)
+    if ban_msg:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        await message.answer(ban_msg)
         return
 
     user = existing
@@ -524,6 +549,16 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
             pass
         return
 
+    # Ban check
+    ban_msg = await ensure_not_banned(db, existing)
+    if ban_msg:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        await message.answer(ban_msg)
+        return
+
     user = existing
     credits = 9999 if user.get("is_admin") else user.get("credits", 0)
     raw = m.group(1).replace("\n", " ").split()
@@ -615,37 +650,74 @@ async def delete_other(message: types.Message):
 async def admin_only(message: types.Message) -> bool:
     return message.from_user.id in ADMIN_USER_IDS
 
-async def cmd_add_credits(message: types.Message, db):
+async def cmd_add_credits(message: types.Message, db, bot: Bot):
     if not await admin_only(message):
         return
     try:
         _, uid, amt = message.text.split()
-        await add_credits(db, int(uid), int(amt))
-        txt = (
-            "Credits Added ✅\n"
+        uid_i = int(uid)
+        amt_i = int(amt)
+        await add_credits(db, uid_i, amt_i)
+        user = await get_user(db, uid_i)
+        username = f"@{user['username']}" if user and user.get("username") else "-"
+        credits = user.get("credits") if user else "?"
+        today = datetime.now(timezone.utc).date()
+        admin_txt = (
+            "✨ <b>Credits Updated</b>\n"
             "━━━━━━━━━━━━━\n"
-            f"User: <a href=\"tg://user?id={uid}\">{uid}</a>\n"
-            f"Credits Added: {amt}\n"
-            f"Date: {datetime.utcnow().date()}"
+            f"👤 User: <a href=\"tg://user?id={uid_i}\">{uid_i}</a> ({username})\n"
+            f"➕ Added: <b>{amt_i}</b>\n"
+            f"💰 Balance: <b>{credits}</b>\n"
+            f"📅 Date: {today}\n"
         )
-        await message.answer(txt, parse_mode=ParseMode.HTML)
+        await message.answer(admin_txt, parse_mode=ParseMode.HTML)
+        try:
+            user_txt = (
+                "💳 <b>Credits Added</b>\n"
+                "━━━━━━━━━━━━━\n"
+                f"➕ Amount: <b>{amt_i}</b>\n"
+                f"💰 New Balance: <b>{credits}</b>\n"
+                f"📅 Date: {today}\n"
+                "Thank you for using the bot! ✨"
+            )
+            await bot.send_message(uid_i, user_txt, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
     except Exception:
         await message.answer("Usage: /addusercredits <user_id> <amount>")
 
-async def cmd_deduct_credits(message: types.Message, db):
+async def cmd_deduct_credits(message: types.Message, db, bot: Bot):
     if not await admin_only(message):
         return
     try:
         _, uid, amt = message.text.split()
-        await deduct_credits(db, int(uid), int(amt))
-        txt = (
-            "Credits Deducted ✅\n"
+        uid_i = int(uid)
+        amt_i = int(amt)
+        await deduct_credits(db, uid_i, amt_i)
+        user = await get_user(db, uid_i)
+        username = f"@{user['username']}" if user and user.get("username") else "-"
+        credits = user.get("credits") if user else "?"
+        today = datetime.now(timezone.utc).date()
+        admin_txt = (
+            "⚠️ <b>Credits Deducted</b>\n"
             "━━━━━━━━━━━━━\n"
-            f"User: <a href=\"tg://user?id={uid}\">{uid}</a>\n"
-            f"Credits Deducted: {amt}\n"
-            f"Date: {datetime.utcnow().date()}"
+            f"👤 User: <a href=\"tg://user?id={uid_i}\">{uid_i}</a> ({username})\n"
+            f"➖ Deducted: <b>{amt_i}</b>\n"
+            f"💰 Balance: <b>{credits}</b>\n"
+            f"📅 Date: {today}\n"
         )
-        await message.answer(txt, parse_mode=ParseMode.HTML)
+        await message.answer(admin_txt, parse_mode=ParseMode.HTML)
+        try:
+            user_txt = (
+                "⚠️ <b>Credits Deducted</b>\n"
+                "━━━━━━━━━━━━━\n"
+                f"➖ Amount: <b>{amt_i}</b>\n"
+                f"💰 New Balance: <b>{credits}</b>\n"
+                f"📅 Date: {today}\n"
+            )
+            await bot.send_message(uid_i, user_txt, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
     except Exception:
         await message.answer("Usage: /deductusercredit <user_id> <amount>")
 
@@ -654,15 +726,16 @@ async def cmd_ban(message: types.Message, db):
         return
     try:
         _, uid, duration = message.text.split()
-        until = None
+        base = datetime.now(timezone.utc)
         if duration.endswith("h"):
-            until = datetime.utcnow() + timedelta(hours=int(duration[:-1]))
+            until = base + timedelta(hours=int(re.sub(r"\D", "", duration) or 1))
         elif duration.endswith("d") or duration.endswith("day"):
-            until = datetime.utcnow() + timedelta(days=int(re.sub(r"\D", "", duration) or 1))
+            until = base + timedelta(days=int(re.sub(r"\D", "", duration) or 1))
         else:
-            until = datetime.max
+            until = datetime.max.replace(tzinfo=timezone.utc)
         await set_ban(db, int(uid), until)
-        await message.answer(f"User {uid} banned until {until if until != datetime.max else '∞'}")
+        until_text = "∞" if until.year >= 9999 else until.strftime("%Y-%m-%d %H:%M")
+        await message.answer(f"🔒 User <a href=\"tg://user?id={uid}\">{uid}</a> banned until {until_text}", parse_mode=ParseMode.HTML)
     except Exception:
         await message.answer("Usage: /banuseraccess <user_id> <1h|1d|2day|unlimited>")
 
@@ -673,7 +746,7 @@ async def cmd_unban(message: types.Message, db):
         _, uid = message.text.split()
         await set_ban(db, int(uid), None)
         url = f"tg://user?id={uid}"
-        await message.answer(f"<a href=\"{url}\">User</a> unbanned.", parse_mode=ParseMode.HTML)
+        await message.answer(f"✅ <a href=\"{url}\">User</a> unbanned.", parse_mode=ParseMode.HTML)
     except Exception:
         await message.answer("Usage: /unbanuseraccess <user_id>")
 
@@ -682,8 +755,15 @@ async def cmd_show_users(message: types.Message, db):
         return
     c = await db.execute("SELECT tg_id, username, credits, joined_at FROM users ORDER BY joined_at DESC LIMIT 200")
     rows = await c.fetchall()
-    lines = [f"{r[0]} | @{r[1] or '-'} | {r[2]} | {r[3][:10] if r[3] else ''}" for r in rows]
-    await message.answer("Users (id|username|credits|joined):\n" + "\n".join(lines)[:4000])
+    header = "👥 <b>User List</b>\n━━━━━━━━━━━━━\n"
+    lines = []
+    for idx, r in enumerate(rows, 1):
+        uid, uname, credits, joined = r
+        handle = f"@{uname}" if uname else "-"
+        joined_date = (joined[:10] if joined else "")
+        lines.append(f"{idx:>2}. <code>{uid}</code> | {handle} | 💰 {credits} | 📅 {joined_date}")
+    text = header + "\n".join(lines)
+    await message.answer(text[:4000], parse_mode=ParseMode.HTML)
 
 async def cmd_freeze(message: types.Message, db):
     if not await admin_only(message):
@@ -769,7 +849,7 @@ async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot)
     if existing:
         await callback.answer("You are already registered.", show_alert=True)
     else:
-        _ = await ensure_user(db, callback.from_user)
+        u = await ensure_user(db, callback.from_user)
         await callback.message.answer(
             "🎉 Registration successful! Free credits added to your account.",
             reply_markup=kb_start(registered=True),
@@ -777,7 +857,20 @@ async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot)
         )
         if NEW_USER_CHANNEL_ID:
             try:
-                await bot.send_message(NEW_USER_CHANNEL_ID, f"New user: {mention(callback.from_user)}", parse_mode=ParseMode.HTML)
+                uid = u["tg_id"]
+                handle = f"@{u['username']}" if u.get("username") else "-"
+                joined = (u.get("joined_at") or "")[:10]
+                credits = u.get("credits", 0)
+                text = (
+                    "🆕 <b>New User Registered</b>\n"
+                    "━━━━━━━━━━━━━\n"
+                    f"🆔 User ID: <code>{uid}</code>\n"
+                    f"👤 Name: {mention(callback.from_user)}\n"
+                    f"💬 Username: {handle}\n"
+                    f"📅 Join Date: {joined}\n"
+                    f"💰 Credits: <b>{credits}</b>\n"
+                )
+                await bot.send_message(NEW_USER_CHANNEL_ID, text, parse_mode=ParseMode.HTML)
             except Exception:
                 pass
         await callback.answer()
@@ -840,8 +933,8 @@ async def main():
     dp.message.register(delete_other, Flow.in_gate_mccn)
 
     # Admin
-    dp.message.register(partial(cmd_add_credits, db=db), F.text.startswith("/addusercredits"))
-    dp.message.register(partial(cmd_deduct_credits, db=db), F.text.startswith("/deductusercredit"))
+    dp.message.register(partial(cmd_add_credits, db=db, bot=bot), F.text.startswith("/addusercredits"))
+    dp.message.register(partial(cmd_deduct_credits, db=db, bot=bot), F.text.startswith("/deductusercredit"))
     dp.message.register(partial(cmd_ban, db=db), F.text.startswith("/banuseraccess"))
     dp.message.register(partial(cmd_unban, db=db), F.text.startswith("/unbanuseraccess"))
     dp.message.register(partial(cmd_show_users, db=db), F.text.startswith("/showuserlist"))

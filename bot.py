@@ -455,12 +455,21 @@ async def cmd_broadcast(message: types.Message, db, bot: Bot):
 
 # App wiring
 async def main():
-  if not BOT_TOKEN: raise RuntimeError("BOT_TOKEN env missing")
-  bot = Bot(BOT_TOKEN, parse_mode=ParseMode.HTML)
+  if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN env missing")
+
+  # ✅ use DefaultBotProperties for parse_mode
+  from aiogram.client.default import DefaultBotProperties
+  bot = Bot(
+      BOT_TOKEN,
+      default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+  )
+
   dp = Dispatcher()
   db = await open_db()
 
-  dp.message.register(lambda m, s=dp, d=db, b=bot: on_start(m, s.fsm, d, b), CommandStart())
+  # ✅ aiogram injects FSMContext automatically, no need for s.fsm
+  dp.message.register(lambda m, d=db, b=bot: on_start(m, FSMContext(), d, b), CommandStart())
   dp.callback_query.register(cb_close, F.data == "close")
   dp.callback_query.register(cb_back_menu, F.data == "back_to_menu")
   dp.callback_query.register(lambda c, d=db, b=bot: cb_reg(c, d, b), F.data == "reg")
@@ -471,8 +480,8 @@ async def main():
   dp.callback_query.register(cb_mccn, F.data == "mccn")
   dp.callback_query.register(cb_commands, F.data == "back_to_commands")
 
-  dp.message.register(lambda m, s=dp, d=db, b=bot: do_ccn(m, s.fsm, d, b), Flow.in_gate_ccn, F.text.startswith("/ccn"))
-  dp.message.register(lambda m, s=dp, d=db, b=bot: do_mccn(m, s.fsm, d, b), Flow.in_gate_mccn, F.text.startswith("/mccn"))
+  dp.message.register(lambda m, d=db, b=bot: do_ccn(m, d, b), Flow.in_gate_ccn, F.text.startswith("/ccn"))
+  dp.message.register(lambda m, d=db, b=bot: do_mccn(m, d, b), Flow.in_gate_mccn, F.text.startswith("/mccn"))
   dp.message.register(delete_other, Flow.in_gate_ccn)
   dp.message.register(delete_other, Flow.in_gate_mccn)
 
@@ -487,8 +496,3 @@ async def main():
 
   await dp.start_polling(bot)
 
-if __name__ == "__main__":
-  try:
-    asyncio.run(main())
-  except (KeyboardInterrupt, SystemExit):
-    pass

@@ -719,6 +719,96 @@ async def cmd_broadcast(message: types.Message, db, bot: Bot):
     await message.answer(f"Broadcast sent to {sent} users")
 
 # =====================
+# Handlers: Start & Callbacks
+# =====================
+
+async def insufficient(message: types.Message):
+    try:
+        await message.answer("⚠️ Insufficient credits. Please contact the owner to top up.", reply_markup=kb_contact_back())
+    except Exception:
+        pass
+
+async def on_start(message: types.Message, state: FSMContext, db, bot: Bot):
+    try:
+        await state.clear()
+    except Exception:
+        pass
+    existing = await get_user(db, message.from_user.id)
+    registered = bool(existing)
+    credits = None if (existing and existing.get("is_admin")) else (existing.get("credits", 0) if existing else None)
+    await message.answer(
+        await start_message_text(message.from_user, registered=registered, credits=credits),
+        reply_markup=kb_start(registered=registered),
+        parse_mode=ParseMode.HTML,
+    )
+
+async def cb_close(callback: types.CallbackQuery):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.answer("Closed", show_alert=False)
+
+async def cb_back_menu(callback: types.CallbackQuery, state: FSMContext, db):
+    try:
+        await state.clear()
+    except Exception:
+        pass
+    existing = await get_user(db, callback.from_user.id)
+    registered = bool(existing)
+    credits = None if (existing and existing.get("is_admin")) else (existing.get("credits", 0) if existing else None)
+    await callback.message.answer(
+        await start_message_text(callback.from_user, registered=registered, credits=credits),
+        reply_markup=kb_start(registered=registered),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot):
+    existing = await get_user(db, callback.from_user.id)
+    if existing:
+        await callback.answer("You are already registered.", show_alert=True)
+    else:
+        _ = await ensure_user(db, callback.from_user)
+        await callback.message.answer(
+            "🎉 Registration successful! Free credits added to your account.",
+            reply_markup=kb_start(registered=True),
+            parse_mode=ParseMode.HTML,
+        )
+        if NEW_USER_CHANNEL_ID:
+            try:
+                await bot.send_message(NEW_USER_CHANNEL_ID, f"New user: {mention(callback.from_user)}", parse_mode=ParseMode.HTML)
+            except Exception:
+                pass
+        await callback.answer()
+
+async def cb_commands(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(Flow.in_commands)
+    await callback.message.answer("🧭 Available sections:", reply_markup=kb_commands())
+    await callback.answer()
+
+async def cb_gate(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(Flow.in_commands)
+    await callback.message.answer("Choose a gate:", reply_markup=kb_gate())
+    await callback.answer()
+
+async def cb_credits(callback: types.CallbackQuery, db):
+    existing = await get_user(db, callback.from_user.id)
+    credits = "∞" if (existing and existing.get("is_admin")) else str(existing.get("credits", 0) if existing else 0)
+    await callback.message.answer(f"💰 <b>Credits</b> ⌁ {credits}", parse_mode=ParseMode.HTML, reply_markup=kb_back())
+    await callback.answer()
+
+async def cb_ccn(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(Flow.in_gate_ccn)
+    await callback.message.answer(await ccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
+    await callback.answer()
+
+async def cb_mccn(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(Flow.in_gate_mccn)
+    await callback.message.answer(await mccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
+    await callback.answer()
+
+# =====================
 # App wiring
 # =====================
 async def main():

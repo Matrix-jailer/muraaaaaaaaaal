@@ -204,6 +204,22 @@ async def fetch_text(url: str) -> str:
         async with s.get(url, timeout=30) as r:
             return await r.text()
 
+async def edit_or_answer(message: types.Message, text: str, reply_markup=None):
+    try:
+        await message.edit_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    except Exception:
+        try:
+            await message.answer(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
+
+async def delete_if_processing(message: types.Message):
+    if processing_users.get(message.from_user.id):
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
 async def bin_details(bin6: str) -> Dict[str, str]:
     try:
         if not BeautifulSoup:
@@ -216,6 +232,15 @@ async def bin_details(bin6: str) -> Dict[str, str]:
             cols = row.find_all("td")
             if len(cols) == 2:
                 res[cols[0].get_text(strip=True)] = cols[1].get_text(strip=True)
+        # Post-process to normalize Country field
+        if "Country" not in res:
+            for k, v in list(res.items()):
+                lk = k.lower().strip()
+                if "country" in lk and ("name" in lk or "iso" in lk or k.strip() == "Country"):
+                    country = (v or "").strip()
+                    country = re.sub(r"\s+", " ", country)
+                    res["Country"] = country
+                    break
         return res
     except Exception:
         return {}
@@ -559,6 +584,13 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
         await message.answer(ban_msg)
         return
 
+    if processing_users.get(message.from_user.id):
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        return
+
     user = existing
     credits = 9999 if user.get("is_admin") else user.get("credits", 0)
     raw = m.group(1).replace("\n", " ").split()
@@ -584,6 +616,8 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
         await insufficient(message)
         return
     cards = cards[:can]
+
+    processing_users[message.from_user.id] = True
 
     # BIN info (unique)
     uniq_bins: Dict[str, Dict[str, str]] = {}
@@ -635,6 +669,7 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
     finally:
         stop.set()
         await asyncio.sleep(0.1)
+        processing_users.pop(message.from_user.id, None)
         await message.answer(await mccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
 
 # Delete stray messages in gate states
@@ -809,6 +844,12 @@ async def insufficient(message: types.Message):
         pass
 
 async def on_start(message: types.Message, state: FSMContext, db, bot: Bot):
+    if processing_users.get(message.from_user.id):
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        return
     try:
         await state.clear()
     except Exception:
@@ -837,11 +878,7 @@ async def cb_back_menu(callback: types.CallbackQuery, state: FSMContext, db):
     existing = await get_user(db, callback.from_user.id)
     registered = bool(existing)
     credits = None if (existing and existing.get("is_admin")) else (existing.get("credits", 0) if existing else None)
-    await callback.message.answer(
-        await start_message_text(callback.from_user, registered=registered, credits=credits),
-        reply_markup=kb_start(registered=registered),
-        parse_mode=ParseMode.HTML,
-    )
+    await edit_or_answer(callback.message, await start_message_text(callback.from_user, registered=registered, credits=credits), reply_markup=kb_start(registered=registered))
     await callback.answer()
 
 async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot):
@@ -850,11 +887,7 @@ async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot)
         await callback.answer("You are already registered.", show_alert=True)
     else:
         u = await ensure_user(db, callback.from_user)
-        await callback.message.answer(
-            "🎉 Registration successful! Free credits added to your account.",
-            reply_markup=kb_start(registered=True),
-            parse_mode=ParseMode.HTML,
-        )
+        await edit_or_answer(callback.message, "🎉 Registration successful! Free credits added to your account.", reply_markup=kb_start(registered=True))
         if NEW_USER_CHANNEL_ID:
             try:
                 uid = u["tg_id"]
@@ -877,28 +910,28 @@ async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot)
 
 async def cb_commands(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Flow.in_commands)
-    await callback.message.answer("🧭 Available sections:", reply_markup=kb_commands())
+    await edit_or_answer(callback.message, "🧭 Available sections:", reply_markup=kb_commands())
     await callback.answer()
 
 async def cb_gate(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Flow.in_commands)
-    await callback.message.answer("Choose a gate:", reply_markup=kb_gate())
+    await edit_or_answer(callback.message, "Choose a gate:", reply_markup=kb_gate())
     await callback.answer()
 
 async def cb_credits(callback: types.CallbackQuery, db):
     existing = await get_user(db, callback.from_user.id)
     credits = "∞" if (existing and existing.get("is_admin")) else str(existing.get("credits", 0) if existing else 0)
-    await callback.message.answer(f"💰 <b>Credits</b> ⌁ {credits}", parse_mode=ParseMode.HTML, reply_markup=kb_back())
+    await edit_or_answer(callback.message, f"💰 <b>Credits</b> ⌁ {credits}", reply_markup=kb_back())
     await callback.answer()
 
 async def cb_ccn(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Flow.in_gate_ccn)
-    await callback.message.answer(await ccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
+    await edit_or_answer(callback.message, await ccn_gate_info(), reply_markup=kb_back())
     await callback.answer()
 
 async def cb_mccn(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Flow.in_gate_mccn)
-    await callback.message.answer(await mccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
+    await edit_or_answer(callback.message, await mccn_gate_info(), reply_markup=kb_back())
     await callback.answer()
 
 # =====================
@@ -911,6 +944,9 @@ async def main():
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     db = await open_db()
+
+    # Message: guard during processing
+    dp.message.register(delete_if_processing)
 
     # Message: /start
     dp.message.register(partial(on_start, db=db, bot=bot), CommandStart())

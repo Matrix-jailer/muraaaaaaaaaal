@@ -289,7 +289,7 @@ async def ensure_not_maintenance(db, user_id: int, is_admin: bool) -> Optional[s
 
 async def start_message_text(u: types.User, registered: bool, credits: Optional[int]) -> str:
     base = (
-        "<b>LITTLE YAMRAJ | Version - 1.0</b>\n"
+        "<b>XOXO CCN | Version - 1.5</b>\n"
         "━━━━━━━━━━━━━\n"
         f"Hello, <b>{u.first_name}</b>! How can I help you today? ✨\n\n"
         f"👤 <b>User ID</b> ⌁ <code>{u.id}</code>\n"
@@ -298,7 +298,7 @@ async def start_message_text(u: types.User, registered: bool, credits: Optional[
     if not registered:
         base += (
             "📝 <b>Registration Required</b>\n"
-            "Tap <b>Register</b> below to get started and receive free credits! 🎁\n"
+            "Tap <b>Register</b> to receive free credits! 🎁\n"
         )
     else:
         cred_text = "∞" if credits is None else str(credits)
@@ -312,7 +312,7 @@ async def ccn_gate_info() -> str:
     return (
         "⚡ <b>CCN AUTH GATE</b>\n"
         "━━━━━━━━━━━━━\n"
-        "• <b>What it does</b> ⌁ Authorizes card details against gateway.\n"
+        "• <b>What it does</b> ⌁ Validates if cards are live CCN.\n"
         "• <b>How to use</b> ⌁ Send: <code>/ccn cc|mm|yyyy|cvv</code>\n"
         "• <b>Status</b> ⌁ Active ✅\n"
         "━━━━━━━━━━━━━"
@@ -323,7 +323,7 @@ async def mccn_gate_info() -> str:
     return (
         "📦 <b>MASS CCN GATE</b>\n"
         "━━━━━━━━━━━━━\n"
-        "• <b>What it does</b> ⌁ Mass checking\n"
+        "• <b>What it does</b> ⌁ Mass CCN checking\n"
         "• <b>How to use</b> ⌁ Send: <code>/mccn</code> cards\n"
         "• <b>Limit</b> ⌁ Max 5\n"
         "• <b>Status</b> ⌁ Active ✅\n"
@@ -839,7 +839,7 @@ async def cmd_broadcast(message: types.Message, db, bot: Bot):
 
 async def insufficient(message: types.Message):
     try:
-        await message.answer("⚠️ Insufficient credits. Please contact the owner to top up.", reply_markup=kb_contact_back())
+        await message.answer("⚠️ <b>Insufficient credits.</b> \n<b>Please contact the owner to top up.</b>", reply_markup=kb_contact_back())
     except Exception:
         pass
 
@@ -887,7 +887,7 @@ async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot)
         await callback.answer("You are already registered.", show_alert=True)
     else:
         u = await ensure_user(db, callback.from_user)
-        await edit_or_answer(callback.message, "🎉 Registration successful! Free credits added to your account.", reply_markup=kb_start(registered=True))
+        await edit_or_answer(callback.message, "🎉 <b>Registration successful!</b> \nFree credits added to your account.", reply_markup=kb_start(registered=True))
         if NEW_USER_CHANNEL_ID:
             try:
                 uid = u["tg_id"]
@@ -910,12 +910,12 @@ async def cb_reg(callback: types.CallbackQuery, state: FSMContext, db, bot: Bot)
 
 async def cb_commands(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Flow.in_commands)
-    await edit_or_answer(callback.message, "🧭 Available sections:", reply_markup=kb_commands())
+    await edit_or_answer(callback.message, "<b>━━━━━━━━━━━━━\n🧭 Available sections: Gates | Credits\n━━━━━━━━━━━━━</b>", reply_markup=kb_commands())
     await callback.answer()
 
 async def cb_gate(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Flow.in_commands)
-    await edit_or_answer(callback.message, "Choose a gate:", reply_markup=kb_gate())
+    await edit_or_answer(callback.message, "<b>━━━━━━━━━━━━━\n💳 Choose a gate: Single | Mass\n━━━━━━━━━━━━━</b>", reply_markup=kb_gate())
     await callback.answer()
 
 async def cb_credits(callback: types.CallbackQuery, db):

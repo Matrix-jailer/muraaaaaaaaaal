@@ -289,170 +289,67 @@ async def ccn_gate_info() -> str:
     )
 
 async def mccn_gate_info() -> str:
+    # Updated per user request
     return (
         "📦 <b>MASS CCN GATE</b>\n"
         "━━━━━━━━━━━━━\n"
-        "• <b>What it does</b> ⌁ Checks multiple cards in a single run.\n"
-        "• <b>How to use</b> ⌁ Send: <code>/mccn</code> followed by up to 5 lines of <code>cc|mm|yyyy|cvv</code>\n"
-        "• <b>Limit</b> ⌁ Max 5 cards per run\n"
+        "• <b>What it does</b> ⌁ Mass checking\n"
+        "• <b>How to use</b> ⌁ Send: <code>/mccn</code> cards\n"
+        "• <b>Limit</b> ⌁ Max 5\n"
         "• <b>Status</b> ⌁ Active ✅\n"
         "━━━━━━━━━━━━━"
     )
 
 # =====================
-# Handlers
+# Validation & Classification
 # =====================
-async def on_start(message: types.Message, state: FSMContext, db, bot: Bot):
-    u = message.from_user
-    ex = await get_user(db, u.id)
-    if ex:
-        ban = await ensure_not_banned(db, ex)
-        if ban:
-            msg = await message.answer(ban)
-            await asyncio.sleep(5)
-            try:
-                await bot.delete_message(message.chat.id, msg.message_id)
-            except Exception:
-                pass
-            return
-    maint = await ensure_not_maintenance(db, u.id, bool(ex and ex.get("is_admin")))
-    if maint:
-        await message.answer(maint)
-        return
 
-    await state.clear()
-    registered = bool(ex)
-    credits = (None if (ex and ex.get("is_admin")) else (ex.get("credits") if ex else None))
-    await message.answer(
-        await start_message_text(u, registered=registered, credits=credits),
-        reply_markup=kb_start(registered=registered),
-        parse_mode=ParseMode.HTML,
-    )
-
-async def cb_close(call: types.CallbackQuery):
-    try:
-        await call.message.delete()
-    except Exception:
-        pass
-    await call.answer()
-
-async def cb_back_menu(call: types.CallbackQuery, state: FSMContext, db):
-    await state.clear()
-    ex = await get_user(db, call.from_user.id)
-    registered = bool(ex)
-    credits = (None if (ex and ex.get("is_admin")) else (ex.get("credits") if ex else None))
-    await call.message.edit_text(
-        await start_message_text(call.from_user, registered=registered, credits=credits),
-        reply_markup=kb_start(registered=registered),
-        parse_mode=ParseMode.HTML,
-    )
-    await call.answer()
-
-async def cb_reg(call: types.CallbackQuery, db, bot: Bot):
-    u = call.from_user
-    ex = await get_user(db, u.id)
-    if ex:
-        b = InlineKeyboardBuilder()
-        b.button(text="🧭 Commands", callback_data="commands")
-        b.button(text="✖️ Close", callback_data="close")
-        b.adjust(2)
-        await call.message.edit_text(
-            "⚠️ <b>Already Registered</b>\n\n"
-            "You are already registered in this bot.\n"
-            "Tap <b>Commands</b> to explore features.",
-            reply_markup=b.as_markup(),
-            parse_mode=ParseMode.HTML,
-        )
-        await call.answer()
-        return
-
-    nu = await ensure_user(db, u)
-
-    if NEW_USER_CHANNEL_ID:
-        try:
-            await bot.send_message(
-                NEW_USER_CHANNEL_ID,
-                f"🆕 New user registered: {mention(u)} (ID: {u.id})",
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            pass
-
-    await call.message.edit_text(
-        "✅ <b>Registration Successful</b>\n"
-        "━━━━━━━━━━━━━━\n"
-        f"👤 <b>Name</b> ⌁ {u.full_name}\n"
-        f"🆔 <b>User ID</b> ⌁ {u.id}\n"
-        f"💰 <b>Credits</b> ⌁ {nu['credits']}",
-        reply_markup=kb_back(),
-        parse_mode=ParseMode.HTML,
-    )
-    await call.answer("Registered")
-
-async def cb_commands(call: types.CallbackQuery, state: FSMContext):
-    await state.set_state(Flow.in_commands)
-    await call.message.edit_text(
-        "🧭 <b>Main Menu</b>\n"
-        "Choose a section below to continue:",
-        reply_markup=kb_commands(),
-        parse_mode=ParseMode.HTML,
-    )
-    await call.answer()
-
-async def cb_gate(call: types.CallbackQuery, state: FSMContext):
-    await call.message.edit_text(
-        "🛠️ <b>Gate Center</b>\n"
-        "Select a gate to proceed:",
-        reply_markup=kb_gate(),
-        parse_mode=ParseMode.HTML,
-    )
-    await call.answer()
-
-async def cb_credits(call: types.CallbackQuery, db):
-    u = await get_user(db, call.from_user.id)
-    joined = u["joined_at"].split("T")[0] if u and u.get("joined_at") else "N/A"
-    credits = "∞" if (u and u.get("is_admin")) else (u.get("credits", 0) if u else 0)
-    await call.message.edit_text(
-        f"🟢 <b>Name</b> ⌁ {call.from_user.full_name}\n"
-        f"📅 <b>Joined</b> ⌁ {joined}\n"
-        f"💰 <b>Credits</b> ⌁ {credits}",
-        reply_markup=kb_back(),
-        parse_mode=ParseMode.HTML,
-    )
-    await call.answer()
-
-async def cb_ccn(call: types.CallbackQuery, state: FSMContext):
-    await state.set_state(Flow.in_gate_ccn)
-    await call.message.edit_text(await ccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
-    await call.answer()
-
-async def cb_mccn(call: types.CallbackQuery, state: FSMContext):
-    await state.set_state(Flow.in_gate_mccn)
-    await call.message.edit_text(await mccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
-    await call.answer()
-
-async def insufficient(message: types.Message):
-    await message.answer(
-        "<b>Insufficient Credits!</b>\n"
-        "━━━━━━━━━━━━━━━━\n"
-        "😔 Oops! You're out of credits.\n"
-        "🎯 Required: at least 1 credit.",
-        reply_markup=kb_contact_back(),
-        parse_mode=ParseMode.HTML,
-    )
+def luhn_valid(card_number: str) -> bool:
+    if not card_number.isdigit():
+        return False
+    if not (12 <= len(card_number) <= 19):  # Typical PAN lengths (Amex=15, Visa up to 19)
+        return False
+    total = 0
+    reverse_digits = card_number[::-1]
+    for i, d in enumerate(reverse_digits):
+        n = int(d)
+        if i % 2 == 1:
+            n *= 2
+            if n > 9:
+                n -= 9
+        total += n
+    return total % 10 == 0
 
 async def parse_cc(cc: str) -> Optional[str]:
     parts = re.split(r"[|]", cc.strip())
     if len(parts) != 4:
         return None
     c, m, y, cvv = parts
+    c, m, y, cvv = c.strip(), m.strip(), y.strip(), cvv.strip()
     if not c.isdigit() or not m.isdigit() or not y.isdigit() or not cvv.isdigit():
         return None
-    if len(c) < 12:
+    if not luhn_valid(c):
+        return None
+    mi = int(m)
+    if mi < 1 or mi > 12:
         return None
     if len(y) == 2:
         y = "20" + y
     return f"{c}|{m}|{y}|{cvv}"
+
+def classify_head(status: str, message: str) -> str:
+    s = (status or "").lower()
+    upper_msg = (message or "").upper()
+    # 3DS / OTP detection
+    if any(k in upper_msg for k in ["3DS", "3D", "OTP", "ONE TIME PASSWORD", "REDIRECT", "3-D"]):
+        return "⚠️ <b>3D Card</b>"
+    # Approved-ish outcomes
+    if s in ("succeeded", "order_id", "requires_action"):
+        return "✅ <b>Approved</b>"
+    if "SECURITY CODE IS INCORRECT" in upper_msg:
+        return "✅ <b>Approved</b>"
+    # Default
+    return "❌ <b>Declined</b>"
 
 async def animate_processing(bot: Bot, chat_id: int, message_id: int, base: str, stop: asyncio.Event):
     dots = [".", "..", "..."]
@@ -461,6 +358,7 @@ async def animate_processing(bot: Bot, chat_id: int, message_id: int, base: str,
         try:
             await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=f"{base}\n🔄 Processing{dots[i % 3]}", parse_mode=ParseMode.HTML)
         except Exception:
+            # Ignore edit conflicts or race conditions while animating
             pass
         i += 1
         await asyncio.sleep(0.6)
@@ -526,6 +424,10 @@ async def do_ccn(message: types.Message, state: FSMContext, db, bot: Bot):
     full = await parse_cc(m.group(1))
     if not full:
         processing_users.pop(message.from_user.id, None)
+        try:
+            await message.delete()
+        except Exception:
+            pass
         return
 
     cnum = full.split("|")[0]
@@ -543,8 +445,7 @@ async def do_ccn(message: types.Message, state: FSMContext, db, bot: Bot):
             r = res[0]
             status = r.get("status", "")
             emsg = r.get("message", "Result")
-            ok = status in ("succeeded", "order_id", "requires_action") or (emsg == "Your card's security code is incorrect.")
-            head = "✅ Approved" if ok else "❌ Declined"
+            head = classify_head(status, emsg)
             text = (
                 f"{head}\n"
                 "━━━━━━━━━━━━━\n"
@@ -553,7 +454,14 @@ async def do_ccn(message: types.Message, state: FSMContext, db, bot: Bot):
                 + format_bin_block(bin6, info)
                 + f"\n🆔 <b>Checked by:</b> {mention(message.from_user)}"
             )
-            await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=text, parse_mode=ParseMode.HTML)
+            # Stop animation before final edit to avoid race
+            stop.set()
+            await asyncio.sleep(0.2)
+            try:
+                await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=text, parse_mode=ParseMode.HTML)
+            except Exception:
+                # Fallback: send as a new message so user never gets stuck
+                await message.answer(text, parse_mode=ParseMode.HTML)
             if CHECK_RESULTS_CHANNEL_ID:
                 try:
                     await bot.send_message(CHECK_RESULTS_CHANNEL_ID, text, parse_mode=ParseMode.HTML)
@@ -561,6 +469,15 @@ async def do_ccn(message: types.Message, state: FSMContext, db, bot: Bot):
                     pass
             if not user.get("is_admin"):
                 await deduct_credits(db, message.from_user.id, 1)
+        else:
+            # Unknown response; stop animation and notify
+            stop.set()
+            await asyncio.sleep(0.2)
+            fallback = base + "\n<b>Unable to process the card at the moment.</b>"
+            try:
+                await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=fallback, parse_mode=ParseMode.HTML)
+            except Exception:
+                await message.answer(fallback, parse_mode=ParseMode.HTML)
     finally:
         stop.set()
         await asyncio.sleep(0.1)
@@ -619,7 +536,8 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
         if len(cards) >= 5:
             break
 
-    if not cards:
+    # Enforce 2-5 valid cards input; if less than 2, delete user's message
+    if len(cards) < 2:
         try:
             await message.delete()
         except Exception:
@@ -650,20 +568,30 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
     try:
         out: List[str] = []
         for c in cards:
-            res = await fetch_json(BASE_CC_API + c)
+            try:
+                res = await fetch_json(BASE_CC_API + c)
+            except Exception:
+                res = None
             if isinstance(res, list) and res:
                 r = res[0]
                 emsg = r.get("message", "Result")
                 status = r.get("status", "")
-                ok = status in ("succeeded", "order_id", "requires_action") or (emsg == "Your card's security code is incorrect.")
-                head = "✅ Approved" if ok else "❌ Declined"
+                head = classify_head(status, emsg)
                 out.append(
                     f"{head}\n💳 <code>{c}</code>\n╰┈➤ <b>{emsg}</b>\n━━━━━━━━━━━━━"
                 )
                 if not user.get("is_admin"):
                     await deduct_credits(db, message.from_user.id, 1)
+            else:
+                out.append(f"❌ <b>Declined</b>\n💳 <code>{c}</code>\n╰┈➤ <b>Unable to process</b>\n━━━━━━━━━━━━━")
         final = "\n".join(out) + f"\n🆔 <b>Checked by:</b> {mention(message.from_user)}"
-        await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=final, parse_mode=ParseMode.HTML)
+        # Stop animation before final edit to avoid race
+        stop.set()
+        await asyncio.sleep(0.2)
+        try:
+            await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=final, parse_mode=ParseMode.HTML)
+        except Exception:
+            await message.answer(final, parse_mode=ParseMode.HTML)
         if CHECK_RESULTS_CHANNEL_ID:
             try:
                 await bot.send_message(CHECK_RESULTS_CHANNEL_ID, final, parse_mode=ParseMode.HTML)
@@ -775,7 +703,7 @@ async def cmd_broadcast(message: types.Message, db, bot: Bot):
     try:
         content = message.text.split(" ", 1)[1]
     except Exception:
-        await message.answer("Usage: /broadcastmessage <text> (use \n for new lines)")
+        await message.answer("Usage: /broadcastmessage <text> (use \\n for new lines)")
         return
     content = content.replace("\\n", "\n")
     c = await db.execute("SELECT tg_id FROM users")

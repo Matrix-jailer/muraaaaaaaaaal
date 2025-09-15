@@ -507,30 +507,16 @@ async def cmd_refresh_checking(message: types.Message, state: FSMContext, db):
     except Exception:
         pass
     
-    # Add small delay to ensure cleanup
-    await asyncio.sleep(0.5)
-    
     # Show main menu
     existing = await get_user(db, user_id)
     registered = bool(existing)
     credits = None if (existing and existing.get("is_admin")) else (existing.get("credits", 0) if existing else None)
     
-    try:
-        await message.answer(
-            await start_message_text(message.from_user, registered=registered, credits=credits),
-            reply_markup=kb_start(registered=registered),
-            parse_mode=ParseMode.HTML,
-        )
-    except Exception:
-        # If rate limited, wait and try again
-        await asyncio.sleep(2.0)
-        try:
-            await message.answer(
-                "🔄 Processing reset. You can now use the bot normally.",
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            pass
+    await message.answer(
+        await start_message_text(message.from_user, registered=registered, credits=credits),
+        reply_markup=kb_start(registered=registered),
+        parse_mode=ParseMode.HTML,
+    )
 
 # =====================
 # Gates
@@ -748,18 +734,16 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
 
     processing_users[message.from_user.id] = True
 
-    # BIN info (unique) - Add delay between BIN API calls to avoid rate limits
-    uniq_bins: Dict[str, Dict[str, str]] = {}
-    for i, c in enumerate(cards):
-        b6 = c.split('|')[0][:6]
-        if b6 not in uniq_bins:
-            if i > 0:  # Add delay between BIN API calls (except first one)
-                await asyncio.sleep(0.5)
-            uniq_bins[b6] = await bin_details(b6)
+    # BIN info (unique)
+#    uniq_bins: Dict[str, Dict[str, str]] = {}
+#    for c in cards:
+#        b6 = c.split('|')[0][:6]
+#        if b6 not in uniq_bins:
+#            uniq_bins[b6] = await bin_details(b6)
 
     base = "\n".join([f"💳 <code>{c}</code>" for c in cards])
-    for b, info in uniq_bins.items():
-        base += format_bin_block(b, info)
+#    for b, info in uniq_bins.items():
+#        base += format_bin_block(b, info)
 
     msg = await message.answer(base, parse_mode=ParseMode.HTML)
     stop = asyncio.Event()
@@ -767,11 +751,8 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
 
     try:
         out: List[str] = []
-        for i, c in enumerate(cards):
+        for c in cards:
             try:
-                # Add delay between CC API calls to avoid rate limits
-                if i > 0:
-                    await asyncio.sleep(1.0)
                 res = await fetch_json(BASE_CC_API + c)
             except Exception:
                 res = None
@@ -787,53 +768,24 @@ async def do_mccn(message: types.Message, state: FSMContext, db, bot: Bot):
                     await deduct_credits(db, message.from_user.id, 1)
             else:
                 out.append(f"❌ <b>Declined</b>\n💳 <code>{c}</code>\n╰┈➤ <b>Unable to process</b>\n━━━━━━━━━━━━━")
-        
         final = "\n".join(out) + f"\n🆔 <b>Checked by:</b> {mention(message.from_user)}"
-        
         # Stop animation before final edit to avoid race
         stop.set()
-        await asyncio.sleep(0.5)  # Longer delay before final message
-        
+        await asyncio.sleep(0.2)
         try:
             await bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id, text=final, parse_mode=ParseMode.HTML)
         except Exception:
-            # If edit fails due to rate limit, wait and try as new message
-            await asyncio.sleep(2.0)
-            try:
-                await message.answer(final, parse_mode=ParseMode.HTML)
-            except Exception:
-                # Final fallback - send simple completion message
-                await asyncio.sleep(3.0)
-                await message.answer("✅ Card checking completed. Results processed.", parse_mode=ParseMode.HTML)
-        
-        # Send to channel with delay to avoid rate limits
+            await message.answer(final, parse_mode=ParseMode.HTML)
         if CHECK_RESULTS_CHANNEL_ID:
             try:
-                await asyncio.sleep(1.0)
                 await bot.send_message(CHECK_RESULTS_CHANNEL_ID, final, parse_mode=ParseMode.HTML)
             except Exception:
                 pass
-                
-    except Exception as e:
-        # Handle any unexpected errors
-        stop.set()
-        await asyncio.sleep(0.5)
-        try:
-            await message.answer("⚠️ Processing encountered an error. Please try again.", parse_mode=ParseMode.HTML)
-        except Exception:
-            pass
     finally:
         stop.set()
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
         processing_users.pop(message.from_user.id, None)
-        
-        # Send gate info with delay
-        try:
-            await asyncio.sleep(1.0)
-            await message.answer(await mccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
-        except Exception:
-            # If rate limited, user can still use /refreshchecking to reset
-            pass
+        await message.answer(await mccn_gate_info(), reply_markup=kb_back(), parse_mode=ParseMode.HTML)
 
 # Delete stray messages in gate states
 async def delete_other(message: types.Message):

@@ -35,7 +35,7 @@ CHECK_RESULTS_CHANNEL_ID = int(os.getenv("CHECK_RESULTS_CHANNEL_ID", "0") or 0)
 FREE_REG_CREDITS = int(os.getenv("FREE_REG_CREDITS", "10") or 10)
 
 DB_PATH = os.getenv("DB_PATH", "bot.db")
-BASE_CC_API = "https://hazunamadada.onrender.com/ccngate/"
+BASE_CC_API = "https://hazunamadada-1.onrender.com/ccngate/"
 
 # =====================
 # FSM

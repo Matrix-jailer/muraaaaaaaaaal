@@ -246,29 +246,26 @@ async def delete_if_processing(message: types.Message):
             pass
 
 async def bin_details(bin6: str) -> Dict[str, str]:
+    """Fetch BIN details from drlabapis"""
     try:
-        if not BeautifulSoup:
-            return {}
-        html = await fetch_text(f"https://bincheck.io/details/{bin6}")
-        soup = BeautifulSoup(html, "html.parser")
-        rows = soup.find_all("tr")
-        res: Dict[str, str] = {}
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) == 2:
-                res[cols[0].get_text(strip=True)] = cols[1].get_text(strip=True)
-        # Post-process to normalize Country field
-        if "Country" not in res:
-            for k, v in list(res.items()):
-                lk = k.lower().strip()
-                if "country" in lk and ("name" in lk or "iso" in lk or k.strip() == "Country"):
-                    country = (v or "").strip()
-                    country = re.sub(r"\s+", " ", country)
-                    res["Country"] = country
-                    break
-        return res
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://drlabapis.onrender.com/api/bin?bin={bin6}",
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("status") == "ok":
+                        return {
+                            "Card Brand": data.get("scheme", "N/A"),
+                            "Card Type": data.get("type", "N/A"),
+                            "Card Level": data.get("tier", "N/A"),
+                            "Issuer Name / Bank": data.get("issuer", "N/A"),
+                            "Country": data.get("country", "N/A"),
+                        }
     except Exception:
-        return {}
+        pass
+    return {}
 
 def format_bin_block(bin6: str, info: Dict[str, str]) -> str:
     brand = info.get("Card Brand", "N/A")
@@ -335,7 +332,7 @@ async def start_message_text(u: types.User, registered: bool, credits: Optional[
 
 async def ccn_gate_info() -> str:
     return (
-        "⚡ <b>CCN AUTH GATE</b>\n"
+        "⚡ <b>PPCP CCN GATE</b>\n"
         "━━━━━━━━━━━━━\n"
         "• <b>What it does</b> ⌁ Validates if cards are live CCN.\n"
         "• <b>How to use</b> ⌁ Send: <code>/ccn cc|mm|yyyy|cvv</code>\n"
@@ -346,7 +343,7 @@ async def ccn_gate_info() -> str:
 async def mccn_gate_info() -> str:
     # Updated per user request
     return (
-        "📦 <b>MASS CCN GATE</b>\n"
+        "📦 <b>PPCP MASS CCN GATE</b>\n"
         "━━━━━━━━━━━━━\n"
         "• <b>What it does</b> ⌁ Mass CCN checking\n"
         "• <b>How to use</b> ⌁ Send: <code>/mccn</code> cards\n"
@@ -484,6 +481,10 @@ def classify_head(status: str, message: str) -> str:
         "STOLEN": "❌ <b>Lost/Stolen</b>",
         "DO NOT HONOR": "❌ <b>Declined</b>",
         "GENERIC ERROR": "❌ <b>Declined</b>",
+        "VALIDATION_ERROR": "❌ <b>Declined</b>",
+        "OAS_VALIDATION_ERROR": "❌ <b>Declined</b>",
+        "R_ERROR": "❌ <b>Declined</b>",
+        "CARD_GENERIC_ERROR": "❌ <b>Declined</b>",
     }
     
     for keyword, response in decline_keywords.items():

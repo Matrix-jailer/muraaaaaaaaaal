@@ -35,7 +35,7 @@ CHECK_RESULTS_CHANNEL_ID = int(os.getenv("CHECK_RESULTS_CHANNEL_ID", "0") or 0)
 FREE_REG_CREDITS = int(os.getenv("FREE_REG_CREDITS", "10") or 10)
 
 DB_PATH = os.getenv("DB_PATH", "bot.db")
-BASE_CC_API = "https://hazunamadada-1.onrender.com/ccngate/"
+BASE_CC_API = "https://hazunamadada-f9n7.onrender.com/ccngate/"
 
 # =====================
 # FSM
@@ -450,40 +450,109 @@ async def parse_cc(cc: str) -> Optional[str]:
     return f"{c}|{m}|{y}|{cvv}"
 
 def classify_head(status: str, message: str) -> str:
+    """Enhanced classification for both Stripe and PPCP responses"""
     s = (status or "").lower()
-    upper_msg = (message or "").upper()
-    # Not supported / card type errors
+    msg = (message or "").strip()
+    upper_msg = msg.upper()
+    
+    # ============================================
+    # PPCP-SPECIFIC RESPONSES (New)
+    # ============================================
+    
+    # PPCP: Charged/Success
+    if s == "charged":
+        return "✅ <b>Approved</b>"
+    
+    # PPCP: CCN Live (Wrong CVV but card valid)
+    if s == "ccn_live" or "CCN LIVE" in upper_msg or "WRONG CVV" in upper_msg:
+        return "✅ <b>Approved</b>"
+    
+    # PPCP: 3DS/OTP Required (success status with 3DS message)
+    if s == "success" and any(k in upper_msg for k in ["3D", "3DS", "OTP", "SECURE"]):
+        return "⚠️ <b>3D Card</b>"
+    
+    # PPCP: Insufficient Funds (card is live)
+    if "INSUFFICIENT" in upper_msg and "FUND" in upper_msg:
+        return "✅ <b>Approved</b>"
+    
+    # PPCP: Account Restricted (card is live)
+    if "ACCOUNT" in upper_msg and "RESTRICTED" in upper_msg:
+        return "✅ <b>Approved</b>"
+    
+    # PPCP: Invalid Billing Address (card is live)
+    if "INVALID" in upper_msg and "BILLING" in upper_msg and "ADDRESS" in upper_msg:
+        return "✅ <b>Approved</b>"
+    
+    # ============================================
+    # STRIPE-SPECIFIC RESPONSES (Existing)
+    # ============================================
+    
+    # Stripe: Invalid CVV variations
     if any(k in upper_msg for k in [
-        "NOT SUPPORTED", "UNSUPPORTED", "CARD TYPE NOT SUPPORTED", "CARD NOT SUPPORTED", "ONLY VISA", "ONLY MASTERCARD"
+        "SECURITY CODE IS INCORRECT",
+        "SECURITY CODE IS INVALID", 
+        "INVALID CVV",
+        "INCORRECT CVV"
+    ]):
+        return "✅ <b>Approved</b>"
+    
+    # Stripe: CCN Added
+    if "CCN ADDED" in upper_msg:
+        return "✅ <b>Approved</b>"
+    
+    # ============================================
+    # COMMON RESPONSES (Both Gateways)
+    # ============================================
+    
+    # Card Type Not Supported
+    if any(k in upper_msg for k in [
+        "NOT SUPPORTED", 
+        "UNSUPPORTED", 
+        "CARD TYPE NOT SUPPORTED",
+        "CARD NOT SUPPORTED",
+        "ONLY VISA",
+        "ONLY MASTERCARD"
     ]):
         return "⚠️ <b>Error</b>"
-    # 3DS / OTP detection
+    
+    # 3DS / OTP Detection (General)
     if any(k in upper_msg for k in ["3DS", "3D", "OTP", "ONE TIME PASSWORD", "REDIRECT", "3-D"]):
         return "⚠️ <b>3D Card</b>"
-    # Approved-ish outcomes
+    
+    # Success Keywords (General)
     success_keywords = [
         "SUCCESS", "SUCCEEDED", "APPROVED", "AUTHORIZED", "AUTHORISED",
         "CAPTURED", "CHARGED", "PAYMENT SUCCESS", "TRANSACTION APPROVED",
-        "CCN ADDED SUCCESSFULLY", "CCN ADDED", "LIVE", "VALID"
+        "LIVE", "VALID"
     ]
-    if s in ("succeeded", "order_id", "requires_action") or any(k in upper_msg for k in success_keywords):
+    if s in ("succeeded", "success", "order_id", "requires_action") or any(k in upper_msg for k in success_keywords):
         return "✅ <b>Approved</b>"
-    if "SECURITY CODE IS INCORRECT" in upper_msg:
-        return "✅ <b>Approved</b>"
-    # Default
+    
+    # ============================================
+    # DECLINED RESPONSES (Both Gateways)
+    # ============================================
+    
+    # Specific decline reasons
+    decline_keywords = {
+        "EXPIRED": "❌ <b>Expired</b>",
+        "INVALID CARD NUMBER": "❌ <b>Invalid Card</b>",
+        "CARD CLOSED": "❌ <b>Card Closed</b>",
+        "LOST": "❌ <b>Lost/Stolen</b>",
+        "STOLEN": "❌ <b>Lost/Stolen</b>",
+        "DO NOT HONOR": "❌ <b>Declined</b>",
+        "GENERIC ERROR": "❌ <b>Declined</b>",
+    }
+    
+    for keyword, response in decline_keywords.items():
+        if keyword in upper_msg:
+            return response
+    
+    # General decline
+    if "DECLINED" in upper_msg or "DENIED" in upper_msg or s == "declined":
+        return "❌ <b>Declined</b>"
+    
+    # Default fallback
     return "❌ <b>Declined</b>"
-
-async def animate_processing(bot: Bot, chat_id: int, message_id: int, base: str, stop: asyncio.Event):
-    dots = [".", "..", "..."]
-    i = 0
-    while not stop.is_set():
-        try:
-            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=f"{base}\n🔄 Processing{dots[i % 3]}", parse_mode=ParseMode.HTML)
-        except Exception:
-            # Ignore edit conflicts or race conditions while animating
-            pass
-        i += 1
-        await asyncio.sleep(0.6)
 
 # =====================
 # NEW: Refresh Checking Command

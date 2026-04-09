@@ -35,7 +35,7 @@ CHECK_RESULTS_CHANNEL_ID = int(os.getenv("CHECK_RESULTS_CHANNEL_ID", "0") or 0)
 FREE_REG_CREDITS = int(os.getenv("FREE_REG_CREDITS", "10") or 10)
 
 DB_PATH = os.getenv("DB_PATH", "bot.db")
-BASE_CC_API = "https://hazunamadada-f9n7.onrender.com/ccngate/"
+BASE_CC_API = "https://hazunamadada-f9n7.onrender.com//ccngate/"
 
 # =====================
 # FSM
@@ -51,63 +51,6 @@ processing_users: Dict[int, bool] = {}
 # Pre-populate existing users data
 # =====================
 EXISTING_USERS_DATA = [
-    {"tg_id": 7959534626, "username": "GamersXd635", "full_name": "Gamers Xd", "credits": 10, "joined_at": "2025-09-11"},
-    {"tg_id": 5531050607, "username": "goromajima5", "full_name": "Goro Majima (Leaving Soon)", "credits": 10, "joined_at": "2025-09-11"},
-    {"tg_id": 6038114720, "username": "AbdullahxPandu", "full_name": "Abdullah Arshad", "credits": 10, "joined_at": "2025-09-11"},
-    {"tg_id": 5677962908, "username": "", "full_name": "Kanik", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5676134575, "username": "fuck_error0", "full_name": "・ Ꭼʀʀᴏr", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8457285588, "username": "", "full_name": "Fucker Hell", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8007776403, "username": "A9918291", "full_name": "jay.", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7227914595, "username": "OPABHI206", "full_name": "ᎧᎮ ᭄ABHI", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6631563533, "username": "deluxemain", "full_name": "Nazrul Badhon", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8416135389, "username": "Messybuddy", "full_name": "Haider 💀", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6014407276, "username": "cachagordas3000", "full_name": "Owner", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 2008807991, "username": "Ariashahneshin", "full_name": "Aria Ap", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6074753264, "username": "im_soon", "full_name": "ﾑ乃乃ﾑㄎ", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7377339612, "username": "Rainbowponk", "full_name": "Rainbowponk", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7643144008, "username": "rdyricch", "full_name": "Roddy @ccs43", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8215049051, "username": "Simplesleeh", "full_name": "Leh", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5390385209, "username": "ghostrelicc", "full_name": "Ibrahim", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7869729211, "username": "ULTRA_M4TRIX69", "full_name": "𝐎𝐕𝐄𝐑 暗┋𝐌𝟒𝐓𝐑𝐈𝐗 || 𝐒ɪʀ !!", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5121589827, "username": "Cyber_secc_info", "full_name": "Cyber sec info", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7711296305, "username": "ZERO_team404", "full_name": "ERROR 404", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6174992305, "username": "FireHabebe", "full_name": "𝗙𝗶𝗿𝗲 点 #BERLIN", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6622603977, "username": "Nairobiangoon", "full_name": "привіт", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6063808507, "username": "NUM90", "full_name": "3𝔇𝔈𝔏 3𝔏ℑ", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6130392009, "username": "Jmi_8n", "full_name": "𓆩ʲᵘᵈʸ𓆪 🎀", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5973723321, "username": "Ninelz8", "full_name": "Lz", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8392036920, "username": "Trezonx", "full_name": "Trezon", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 1472145668, "username": "fvhgha", "full_name": "OPEN MON - THURS", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8266712648, "username": "zero_owner_12", "full_name": "🍻ı𝐥𝐥ı𝐥𝐥ı 𝐙𝐄𝐑𝐎 𝐎𝐖𝐍𝐄𝐑 ıllıllı⎯ⷯ⇢", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8066254707, "username": "Sabayus", "full_name": "jamel omar", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 1127812099, "username": "theng0suy", "full_name": "Théng", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7327922625, "username": "Arpit_up6110", "full_name": "¤๋ࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣧࣧࣧࣧࣧࣧࣧࣧࣧࣧࣧ͜͡ARPIT¤๋ࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣩࣧࣧࣧࣧࣧࣧࣧࣧࣧࣧࣧ͜͡", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7077647136, "username": "pussystore", "full_name": "𝙓𝘿 𝙠𝙞𝙣𝙜", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6638753324, "username": "notyourbadboii", "full_name": "Ace", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5923090134, "username": "JEGOXFERZ", "full_name": "𝐉𝐄𝐆𝐎 𝐅𝐄𝐑𝐙™", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7393788687, "username": "A_wh_q", "full_name": "Mo ☠️", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8331949146, "username": "Coldcoffeeglass", "full_name": "Just A Boy", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 972097425, "username": "blabiloo", "full_name": "Javad", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6470338723, "username": "iLxgxcyz", "full_name": "𝙞𝙇𝙭𝙜𝙭𝙘𝙮 [𝔄𝔩𝔭𝔥𝔞 𝔅𝔦𝔫𝔰]", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6537070341, "username": "mestre7", "full_name": "MESTRE.", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5047528338, "username": "DJ_MA_05", "full_name": "MERCEDES_ BENZ_05", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6578978830, "username": "ifucksirens", "full_name": "7", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7462161012, "username": "Insanely_Noob", "full_name": "Shobhit Sachan", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6494881400, "username": "Alexherealex", "full_name": "Alex", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 580508901, "username": "luckywebsite", "full_name": "X", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 1861293076, "username": "YoBxtchChoosin", "full_name": "dreqs", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7795747049, "username": "Binnernaruto", "full_name": "𝐔𝐙𝐔𝐌𝐀𝐊𝐈 𝐔𝐍𝐊𝐍𝐎𝐖𝐍 ( 𝗰𝘂𝗺𝗯𝗮𝗰𝗸 𝗶𝗻 𝟮𝟬𝟮𝟲 )", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5522858370, "username": "JK007007007", "full_name": "ﾌㄖҜ乇尺", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8078215050, "username": "VERIFIERGURU", "full_name": "Rion Lee", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 8086895684, "username": "Mwpwi", "full_name": "Russel", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7859843811, "username": "", "full_name": "Shyam shankar", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6687677112, "username": "rkngovru0", "full_name": "Роскомнадзор", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 1728190556, "username": "Gen666z", "full_name": "Mia", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 1326462575, "username": "SayTalha", "full_name": "ㅤ", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6332833570, "username": "slowlyfknurmom", "full_name": "⋆˚! 𝐂𝐀𝐑𝐏𝐄𝐃𝐈𝐄𝐌 !˚⋆ 🪷", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 5923929978, "username": "D_O_L_K", "full_name": "彡ᵗᵉˢˡᵃ彡", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 7493581091, "username": "M9neymakey", "full_name": "Thelost23", "credits": 10, "joined_at": "2025-09-12"},
-    {"tg_id": 6113594865, "username": "NEEL_LEGEND", "full_name": "~OG~ Neel ^_^* XD", "credits": 10, "joined_at": "2025-09-12"},
     {"tg_id": 6822528184, "username": "Utopiacorner49494", "full_name": "UwU", "credits": 10, "joined_at": "2025-09-12"},
     {"tg_id": 35984590, "username": "Samangh88", "full_name": "Saman", "credits": 10, "joined_at": "2025-09-12"}
 ]
@@ -553,6 +496,18 @@ def classify_head(status: str, message: str) -> str:
     
     # Default fallback
     return "❌ <b>Declined</b>"
+
+async def animate_processing(bot: Bot, chat_id: int, message_id: int, base: str, stop: asyncio.Event):
+    dots = [".", "..", "..."]
+    i = 0
+    while not stop.is_set():
+        try:
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=f"{base}\n🔄 Processing{dots[i % 3]}", parse_mode=ParseMode.HTML)
+        except Exception:
+            # Ignore edit conflicts or race conditions while animating
+            pass
+        i += 1
+        await asyncio.sleep(0.6)
 
 # =====================
 # NEW: Refresh Checking Command
